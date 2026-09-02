@@ -27,7 +27,7 @@ La sécurité étant la priorité du projet, l'intégralité des flux de l'appli
 La création, suppression et modification de comptes ne pourra se faire que depuis un portail administrateur, nécessitant un compte identifié préalablement et possédant un jeton de session particulier. 
 
 2.5 -Accès aux endpoints :
-Surla page d'accueil se trouvera un menu permettant de répertorier les différents endpoints disponibles via l'application web. Tout accès à un endpoint API est contrôlé par une whitelist, les rôles/comptes renseignés étant les seuls autorisés, tout autre accès étant immédiatement refusé et renseigné dans des logs pour la traçabilité.
+Sur la page d'accueil se trouvera un menu permettant de répertorier les différents endpoints disponibles via l'application web. Tout accès à un endpoint API est contrôlé par une whitelist, les rôles/comptes renseignés étant les seuls autorisés, tout autre accès étant immédiatement refusé et renseigné dans des logs pour la traçabilité.
 
 =+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
 +                                                                                    |
@@ -35,11 +35,11 @@ Surla page d'accueil se trouvera un menu permettant de répertorier les différe
 +                                                                                    |
 =+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
 
-3.1 - Scalabilité
+3.1 - Scalabilité :
 La fréquentation du site étant très variable et instable, il sera implémenté un système de gestion de la fréquentation avec une file d'attente et un load balancer afin de palier aux problèmes de surfréquentation lors des phases d'authentification entre 8h et 10h, ainsi qu'à l'approche de l'échéance fiscale autour de la fin du mois de juin où le trafic peut atteindre 20 millions d'utilisateurs.
 
-3.2 - Traçabilité et suivi
+3.2 - Traçabilité et suivi :
 Afin de faciliter le travail de l'équipe de surveillance et réponse aux incidents, une traçabilité totale de l'application sera mise en place contenant au minimum les informations suivantes : Jour et heure en utilisant un timestamp universel, compte, action performée, endpoint, IP de l'utilisateur. Les actions à risques importants/critiques tels l'accès au panel administrateur, la réinitialisation de mot de passe, la création ou suppression de comptes feront l'objet de création d'un fichier de log avec une priorité supplémentaire.
 
-3.3 - Robustesse aux injections
+3.3 - Robustesse aux injections : 
 L'attaque précédente à l'encontre de la DGFiP ayant entraîné une fuite de données, l'accent sera donc mis sur la sécurisation des différents champs du formulaire d'authentification, en veillant à mettre en place des filtres et contrôles pour éviter les différentes attaques par injection (XSS, SQLi, Command Injection ...)
