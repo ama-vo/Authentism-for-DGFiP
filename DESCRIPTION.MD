@@ -13,7 +13,6 @@ Récemment victime d'une cyber-attaque de grande ampleur ayant pour origine son 
 +                                                                                    |
 =+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
 
-
 2.1 - Identification :
 Afin de réaliser la transformation attendue par la DGFiP, Authentism a complètement redéfini l'architecture cible de la DGFiP en mettant la sécurité au coeur du projet. Pour pouvoir accéder aux services de la DGFiP, les utilisateurs auront a s'authentifier au travers d'un portail sur la base d'un combo login/mot de passe. Le login est le numéro fiscal de l'utilisateur et le mot de passe est défini en respectant les politiques définies par la DGFiP, telles qu'une longueur minimale de 12 caractères et obligation de contenir tous les types de caractères suivants : lettre majuscule, lettre minuscule, chiffre, caractère spécial. Une authentification multi-facteur sera également obligatoire  via l'envoi d'un code sur l'adresse mail du compte essayant de se connecter.
 
@@ -21,12 +20,12 @@ Afin de réaliser la transformation attendue par la DGFiP, Authentism a complèt
 Une fois authentifié, l'identité de l'utilisateur sera garantie par un jeton de session possédant un périmètre défini préalablement, afin de permettre l'implementation d'un Single Sign-On (SSO), garantissant une ergonomie aux différents utilisateurs. La gestion des identités sera traîtée grâce au protocol Lightweight Directory Access Protocol (LDAP) ainsi qu'à un contrôle d'accès basé sur les différents rôles RBAC (utilisateur externe, agent de la DGFiP, administrateur système).
 
 2.3 - Chiffrement des flux :
-La sécurité étant la priorité du projet, l'intégralité des flux de l'application web seront chiffrés à l'aide de différents protocoles, HTTPs/TLS pour les flux web par exemple. Les mots de passe seront hashés et les secrets liés aux comptes tels que les jetons de session seront régulièrement renouvelés et stockés côté serveur.
+La sécurité étant la priorité du projet, l'intégralité des flux de l'application web seront chiffrés à l'aide de différents protocoles, HTTPs/TLS pour les flux web par exemple. Pour le chiffrement par certificats, nous allons implementer une PKI afin de signer les certificats x.509. Les mots de passe seront hashés et les secrets liés aux comptes tels que les jetons de session seront régulièrement renouvelés et stockés côté serveur.
 
 2.4 - Administration de l'application web :
 La création, suppression et modification de comptes ne pourra se faire que depuis un portail administrateur, nécessitant un compte identifié préalablement et possédant un jeton de session particulier. 
 
-2.5 -Accès aux endpoints :
+2.5 - Accès aux endpoints :
 Sur la page d'accueil se trouvera un menu permettant de répertorier les différents endpoints disponibles via l'application web. Tout accès à un endpoint API est contrôlé par une whitelist, les rôles/comptes renseignés étant les seuls autorisés, tout autre accès étant immédiatement refusé et renseigné dans des logs pour la traçabilité.
 
 =+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
