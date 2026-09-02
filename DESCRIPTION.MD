@@ -18,7 +18,7 @@ Une fois authentifié, l'identité de l'utilisateur sera garantie par un jeton d
 
 La sécurité étant la priorité du projet, l'intégralité des flux de l'application web seront chiffrés à l'aide de différents protocoles, HTTPs/TLS pour les flux web par exemple. Les mots de passe seront hashés et les secrets liés aux comptes tels que les jetons de session seront régulièrement renouvelés et stockés côté serveur.
 
-La création, suppression et modification de comptes et de mots de passe ne pourra se faire que depuis un portail administrateur, nécessitant un compte identifié préalablement et possédant un jeton de session particulier. 
+La création, suppression et modification de comptes ne pourra se faire que depuis un portail administrateur, nécessitant un compte identifié préalablement et possédant un jeton de session particulier. 
 
 Tout accès à un endpoint API est contrôlé par une whitelist, les rôles/comptes renseignés étant les seuls autorisés, tout autre accès étant immédiatement refusé et renseigné dans des logs pour la traçabilité.
 
