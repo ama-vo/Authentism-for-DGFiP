@@ -1,3 +1,12 @@
+# Cahier des Charges
+
+Client : DG de la DGFiP
+Maître d'oeuvre : Authentism
+
+Besoin : créer l'ensemble du système d'authentification pour les différents services de la DGFiP de manière robuste.
+
+Rendu prévu pour le : ?
+
 # 1. Introduction 
 
 1.1 - Contexte :
