@@ -1,9 +1,0 @@
-Répartition des tâches :
-
-A. Authentification & Identités :	Login (n° fiscal) / mot de passe (politique stricte), MFA par email, LDAP + RBAC 3 rôles
-B. Session & Cryptographie	: Jeton de session scope SSO, TLS/HTTPS, hash des mots de passe, rotation des secrets
-C. Backend applicatif	: Portail admin (CRUD comptes), menu d'endpoints + whitelist d'accès API 
-D. Infra & Résilience :	Load balancer, file d'attente, montée en charge jusqu'à 20M d'utilisateurs
-E. Sécurité transverse :	Traçabilité/logs, protection anti-injection XSS/SQLi/Command Injection
-
-A -> V
