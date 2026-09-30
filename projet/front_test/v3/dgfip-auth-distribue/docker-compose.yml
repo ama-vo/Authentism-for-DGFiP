@@ -1,69 +1,91 @@
 name: dgfip-auth
 
+# Durcissement commun à tous les services
+x-hardened: &hardened
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  tmpfs:
+    - /tmp
+
 services:
   # --- Puits de logs : jamais exposé, ni à l'hôte ni au frontend ------
   log-collector:
+    <<: *hardened
     build: ./backend/log-collector
     env_file: .env
-    restart: unless-stopped
     networks: [core]
     volumes:
+      # /data doit exister dans l'image, avec le bon propriétaire :
+      #   RUN mkdir /data && chown appuser:appuser /data
+      #   USER appuser
       - log-data:/data
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    read_only: true
-    tmpfs:
-      - /tmp
+    # Healthcheck en Python (pas besoin de curl/wget dans l'image).
+    # Adaptez le port/la route si votre service diffère.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5002/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # --- Système d'authentification (LDAP) : jamais exposé --------------
   auth-system:
+    <<: *hardened
     build: ./backend/auth-system
     env_file: .env
-    restart: unless-stopped
+    # ATTENTION : "core" est internal (aucune sortie). Si l'annuaire LDAP
+    # est externe au compose, ajoutez aussi un réseau non interne ici
+    # (ex. networks: [core, egress] avec egress: {} en bas du fichier).
     networks: [core]
     depends_on:
       log-collector:
         condition: service_healthy
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    read_only: true
-    tmpfs:
-      - /tmp
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5001/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # --- Application Web : seul service qui parle aux deux précédents,
   #     et seul point d'entrée du frontend (jamais publié sur l'hôte) --
   webapp:
+    <<: *hardened
     build: ./backend/webapp
     env_file: .env
     environment:
       AUTH_SYSTEM_URL: http://auth-system:5001
       LOG_COLLECTOR_URL: http://log-collector:5002
-    restart: unless-stopped
     networks: [core, edge]
     depends_on:
       auth-system:
         condition: service_healthy
       log-collector:
         condition: service_healthy
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    read_only: true
-    tmpfs:
-      - /tmp
+    # Port 5000 supposé : à aligner avec le proxy_pass de nginx.conf.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   # --- Frontend : seul service publié sur l'hôte -----------------------
+  # Le healthcheck est défini dans frontend/Dockerfile.
   frontend:
+    <<: *hardened
     build: ./frontend
-    restart: unless-stopped
     networks: [edge]
     ports:
       - "${HTTP_PORT:-80}:8080"
     depends_on:
       webapp:
         condition: service_healthy
-    cap_drop: [ALL]
-    security_opt: ["no-new-privileges:true"]
-    read_only: true
     tmpfs:
       - /tmp
       - /var/cache/nginx
