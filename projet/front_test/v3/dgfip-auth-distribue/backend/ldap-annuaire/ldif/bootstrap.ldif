@@ -17,7 +17,7 @@ objectClass: inetOrgPerson
 uid: 1234567890
 cn: Utilisateur Externe Test
 sn: Externe
-mail: externe.test@example.com
+mail: krawlyag@gmail.com
 userPassword: MotDePasseExterne#2026
 
 dn: uid=1122334455,ou=users,dc=dgfip,dc=fr
@@ -25,7 +25,7 @@ objectClass: inetOrgPerson
 uid: 1122334455
 cn: Agent DGFiP Test
 sn: Agent
-mail: agent.test@example.com
+mail: victorborg0510@gmail.com
 userPassword: MotDePasseAgent#2026
 
 dn: uid=9988776655,ou=users,dc=dgfip,dc=fr
@@ -33,7 +33,7 @@ objectClass: inetOrgPerson
 uid: 9988776655
 cn: Administrateur Test
 sn: Admin
-mail: admin.test@example.com
+mail: eliott.bourmault@gmail.com
 userPassword: MotDePasseAdmin#2026
 
 # ============================================================
