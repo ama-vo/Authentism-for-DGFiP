@@ -27,7 +27,6 @@ export function AdminGatePage() {
   return (
     <div className="admin-gate">
       <div className="auth-card">
-        <div className="auth-eyebrow">POST /admin.php/token</div>
         <h1 className="auth-title" style={{ fontSize: 21 }}>
           Échange de jeton administrateur
         </h1>

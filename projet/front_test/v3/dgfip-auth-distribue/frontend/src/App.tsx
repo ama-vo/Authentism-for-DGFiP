@@ -24,7 +24,7 @@ export default function App() {
             <path d="M20 22 V27" stroke="var(--primary)" strokeWidth="1.6" />
           </svg>
           <div className="brand-text">
-            <div className="service">Portail Sécurisé</div>
+            <div className="service">Portail</div>
             <div className="org">Direction générale des Finances publiques</div>
           </div>
         </div>

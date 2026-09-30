@@ -39,11 +39,9 @@ export function LoginPage() {
   return (
     <div className="auth-wrap">
       <div className="auth-card">
-        <div className="auth-eyebrow">Identification — POST /login.php</div>
         <h1 className="auth-title">Accéder à votre espace</h1>
         <p className="auth-sub">
-          Saisissez votre numéro fiscal et votre mot de passe. Les identifiants sont validés contre
-          l'annuaire LDAP par le Système d'authentification.
+          Saisissez votre numéro fiscal et votre mot de passe.
         </p>
 
         {error && <div className="alert error">{error}</div>}
@@ -86,10 +84,7 @@ export function LoginPage() {
           </button>
         </form>
 
-        <div className="demo-note">
-          Comptes de démonstration (annuaire LDAP simulé, voir <code>auth-system/ldap_directory.py</code>) :
-          agent, utilisateur externe, administrateur système.
-        </div>
+
       </div>
     </div>
   );

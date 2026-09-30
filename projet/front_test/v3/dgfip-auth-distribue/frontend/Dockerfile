@@ -13,7 +13,7 @@ RUN npm ci --no-audit --no-fund
 COPY . .
 # Pas de source maps (cf. vite.config.ts) : le bundle livré ne permet
 # pas de reconstituer le TypeScript source depuis l'inspecteur.
-RUN npm run build
+RUN npm run dev
 
 # ---------- Étape 2 : service statique --------------------------------
 # Image officielle "unprivileged" : tourne nativement en non-root
