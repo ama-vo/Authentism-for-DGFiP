@@ -1,0 +1,5 @@
+# Dépendances pour lancer les services sans Docker et exécuter les tests.
+-r auth-system/requirements.txt
+fakeredis==2.24.1
+pytest==8.3.3
+cryptography==43.0.1

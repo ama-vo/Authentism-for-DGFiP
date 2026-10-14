@@ -1,0 +1,215 @@
+name: authentism-dgfip
+
+# ---------------------------------------------------------------------
+# Architecture (cf. docs/ArchiWebDistribuée.drawio.svg) :
+#
+#   navigateur ──HTTPS──▶ frontend (Nginx : TLS, file d'attente, LB)
+#                            │ réseau "edge"          HTTPS + PKI interne
+#                            ▼
+#                         webapp (Application Web) ×N
+#                            │ réseau "core" (internal : aucune sortie Internet)
+#            ┌───────────────┼──────────────────┐
+#            ▼               ▼                  ▼
+#      auth-system ×N   log-collector     (redis, ldap, mailpit)
+#
+# Seuls `frontend` (80/443) et l'interface de Mailpit (127.0.0.1:8025,
+# boîte mail de démonstration) sont publiés sur l'hôte.
+# ---------------------------------------------------------------------
+
+x-hardened: &hardened
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  tmpfs:
+    - /tmp
+
+x-python-env: &python-env
+  APP_ENV: ${APP_ENV:-production}
+  INTERNAL_SHARED_SECRETS: ${INTERNAL_SHARED_SECRETS:?Lancez d'abord scripts/init_env.py}
+  LOG_COLLECTOR_URL: https://log-collector:5002
+
+services:
+  # --- PKI : génère / renouvelle les certificats X.509, puis s'arrête ---
+  pki:
+    build: ./pki
+    network_mode: none
+    restart: "no"
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      PUBLIC_HOSTNAMES: ${PUBLIC_HOSTNAMES:-localhost}
+    volumes:
+      - pki:/pki
+
+  # --- Annuaire LDAP (identités + groupes RBAC) ------------------------
+  ldap:
+    image: osixia/openldap:1.5.0
+    hostname: ldap
+    command: ["--copy-service", "--loglevel", "warning"]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      LDAP_ORGANISATION: DGFiP
+      LDAP_DOMAIN: dgfip.fr
+      LDAP_ADMIN_PASSWORD: ${LDAP_ADMIN_PASSWORD:?}
+      LDAP_CONFIG_PASSWORD: ${LDAP_CONFIG_PASSWORD:?}
+      LDAP_TLS: "true"
+      LDAP_TLS_CRT_FILENAME: ldap/tls.crt
+      LDAP_TLS_KEY_FILENAME: ldap/tls.key
+      LDAP_TLS_CA_CRT_FILENAME: ldap/ca.crt
+      LDAP_TLS_VERIFY_CLIENT: never
+    volumes:
+      - pki:/container/service/slapd/assets/certs:ro
+      - ldap-data:/var/lib/ldap
+      - ldap-config:/etc/ldap/slapd.d
+    networks: [core]
+    depends_on:
+      pki:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "ldapwhoami -x -H ldap://localhost >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # --- Redis : sessions, codes MFA, compteurs anti brute-force ---------
+  redis:
+    <<: *hardened
+    image: redis:7.4-alpine
+    user: redis
+    command: ["sh", "-c", "exec redis-server --requirepass \"$$REDIS_PASSWORD\" --appendonly yes --save 60 1"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+    volumes:
+      - redis-data:/data
+    networks: [core]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # --- Serveur mail de démonstration (flux 4 : envoi du code 2FA) ------
+  mailpit:
+    image: axllent/mailpit:v1.21
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      MP_SMTP_TLS_CERT: /pki/mail/tls.crt
+      MP_SMTP_TLS_KEY: /pki/mail/tls.key
+      MP_MAX_MESSAGES: "500"
+    volumes:
+      - pki:/pki:ro
+    networks: [core, mail-ui]
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    depends_on:
+      pki:
+        condition: service_completed_successfully
+
+  # --- Puits de logs --------------------------------------------------
+  log-collector:
+    <<: *hardened
+    build:
+      context: ./backend
+      dockerfile: log-collector/Dockerfile
+    environment:
+      <<: *python-env
+      LOG_SIGNING_KEY: ${LOG_SIGNING_KEY:?}
+    volumes:
+      - log-data:/data
+      - pki:/pki:ro
+    networks: [core]
+    depends_on:
+      pki:
+        condition: service_completed_successfully
+
+  # --- Système d'authentification -------------------------------------
+  auth-system:
+    <<: *hardened
+    build:
+      context: ./backend
+      dockerfile: auth-system/Dockerfile
+    environment:
+      <<: *python-env
+      LDAP_MODE: real
+      LDAP_URL: ldaps://ldap:636
+      LDAP_BASE_DN: dc=dgfip,dc=fr
+      LDAP_BIND_DN: cn=admin,dc=dgfip,dc=fr
+      LDAP_BIND_PASSWORD: ${LDAP_ADMIN_PASSWORD:?}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_STARTTLS: "true"
+      SMTP_FROM: no-reply@dgfip.example
+      SEED_DEMO_ACCOUNTS: ${SEED_DEMO_ACCOUNTS:-true}
+      DEBUG_EXPOSE_MFA_CODE: ${DEBUG_EXPOSE_MFA_CODE:-false}
+    volumes:
+      - pki:/pki:ro
+    networks: [core]
+    depends_on:
+      ldap:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      log-collector:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  # --- Application Web ------------------------------------------------
+  webapp:
+    <<: *hardened
+    build:
+      context: ./backend
+      dockerfile: webapp/Dockerfile
+    environment:
+      <<: *python-env
+      AUTH_SYSTEM_URL: https://auth-system:5001
+      COOKIE_SECURE: "true"
+      TRUST_PROXY: "true"
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    volumes:
+      - pki:/pki:ro
+    networks: [core, edge]
+    depends_on:
+      auth-system:
+        condition: service_healthy
+      log-collector:
+        condition: service_healthy
+
+  # --- Frontend + reverse proxy (seul service publié) ------------------
+  frontend:
+    <<: *hardened
+    build: ./frontend
+    volumes:
+      - pki:/pki:ro
+    networks: [edge]
+    ports:
+      - "${HTTP_PORT:-80}:8080"
+      - "${HTTPS_PORT:-443}:8443"
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+    depends_on:
+      webapp:
+        condition: service_healthy
+
+networks:
+  # Réseau interne : ni entrée depuis l'hôte, ni sortie vers Internet.
+  core:
+    internal: true
+  # Relie uniquement Nginx à webapp.
+  edge: {}
+  # Sert uniquement à publier l'interface web de Mailpit sur 127.0.0.1.
+  mail-ui: {}
+
+volumes:
+  pki:
+  ldap-data:
+  ldap-config:
+  redis-data:
+  log-data:

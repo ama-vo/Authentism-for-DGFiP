@@ -1,0 +1,5 @@
+# Fichiers copiés dans des conteneurs Linux : fins de ligne LF quel que
+# soit le réglage git (core.autocrlf) du poste qui clone le dépôt.
+* text=auto eol=lf
+*.pdf binary
+*.png binary

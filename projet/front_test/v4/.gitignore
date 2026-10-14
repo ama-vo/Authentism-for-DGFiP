@@ -1,0 +1,11 @@
+.env
+**/.env
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+dist/
+*.jsonl
+*.db
+ca.crt
+.DS_Store
