@@ -28,11 +28,14 @@ docker compose up --build     # toujours --build après une modification du code
 Le `.env` par défaut contient `COMPOSE_PROFILES=test` : un **LDAP de test** (service `ldap-test`)
 démarre automatiquement avec ces comptes (`ldap/ldap-test.ldif`) :
 
-| Numéro fiscal | Mot de passe | Rôle |
+| Numéro fiscal | Mot de passe de connexion | Rôle |
 | --- | --- | --- |
 | `1000000000001` | `Admin#Dgfip2026!` | Administrateur |
 | `2000000000002` | `Agent#Dgfip2026!` | Agent DGFiP |
 | `3000000000003` | `Usager#Dgfip2026!` | Utilisateur externe |
+
+Pour ouvrir le **panneau d'administration**, l'admin utilise un **second mot de passe**,
+différent : `AdminPanel#2026!` (compte d'administration dans `ou=admins`).
 
 ### Mode production : connexion au vrai annuaire de la DGFiP
 
@@ -44,6 +47,7 @@ Dans `.env` : supprimer `COMPOSE_PROFILES=test` et remplir les variables LDAP.
 | `LDAP_BIND_DN` | `cn=app-authentism,dc=dgfip,dc=local` | Compte de service de l'application |
 | `LDAP_BIND_PASSWORD` | | Son mot de passe |
 | `LDAP_USERS_DN` | `ou=users,dc=dgfip,dc=local` | Branche qui contient les comptes |
+| `LDAP_ADMINS_DN` | `ou=admins,dc=dgfip,dc=local` | Branche des comptes d'administration (mot de passe du panneau admin) |
 | `LDAP_LOGIN_ATTRIBUTE` | `uid` | Attribut contenant le numéro fiscal |
 | `LDAP_ROLE_ATTRIBUTE` | `employeeType` | Attribut contenant le rôle (`usager`, `agent`, `admin`) |
 
@@ -140,7 +144,7 @@ authentism/
 - **RBAC** : 3 rôles (`usager`, `agent`, `admin`) appliqués selon le tableau des permissions.
 
 ### 2.3 Chiffrement et secrets
-- HTTPS/TLS 1.2+ obligatoire (HTTP redirigé, HSTS).
+- HTTPS/TLS 1.2+ obligatoire : seul le port 443 est exposé, HSTS activé.
 - **PKI** (`pki/generate.sh`) : une CA signe le certificat X.509 du site.
 - L'API parle à l'annuaire en **LDAPS** en vérifiant son certificat (`ldap/ca.crt`).
 - Mots de passe hachés **par l'annuaire** : les changements passent par l'opération LDAP
@@ -155,8 +159,16 @@ authentism/
 ### 2.4 Administration
 - Portail `/admin` : créer, modifier (rôle, mot de passe), supprimer un compte ; gérer les
   pages du dashboard ; consulter les journaux.
-- Accès : compte admin connecté **+ ressaisie du mot de passe** → jeton de session dédié
-  à l'administration (15 min).
+- Accès : compte admin connecté **+ mot de passe d'administration**, différent du mot de passe
+  de connexion → jeton de session dédié à l'administration (15 min).
+- Chaque administrateur a **deux comptes LDAP** : son compte habituel (`ou=users`) et un
+  **compte d'administration** (`ou=admins`). Voler le mot de passe de connexion ne suffit donc
+  pas pour administrer (séparation des comptes à privilèges, recommandation ANSSI).
+- L'application **impose que les deux mots de passe soient différents** (création, promotion,
+  changement par l'admin, réinitialisation).
+- 5 échecs sur le mot de passe d'administration → panneau bloqué 15 min (journalisé `CRITIQUE`).
+- Passer un compte admin → création de son compte d'administration ; le rétrograder ou le
+  supprimer → suppression de son compte d'administration.
 
 ### 2.5 Accès aux endpoints
 - `backend/src/whitelist.ts` : **chaque endpoint** est listé avec les rôles autorisés.
@@ -219,6 +231,7 @@ docker compose down -v      # supprime les données locales (base, certificats) 
 | --- | --- |
 | `required variable ... is missing a value` | Créer le fichier `.env` : `cp .env.example .env` puis le remplir |
 | `container postgres exited (1)` | Mot de passe vide : vérifier `.env`, puis `docker compose down -v` et relancer |
+| `failed to bind host port ...:443` | Un autre logiciel utilise le port 443 : l'arrêter, ou remplacer `"443:443"` par `"8443:443"` dans `docker-compose.yml` et ouvrir https://localhost:8443 |
 | `backend exited with code 1` | Lire la cause : `docker compose logs backend`. Souvent une ancienne image : relancer avec `docker compose up --build` |
 | `[ldap] ERREUR de connexion` dans les logs | Vérifier `LDAP_URL` (avec `host.docker.internal` si le LDAP est sur votre machine), le compte de service et `ldap/ca.crt` |
 | Connexion refusée pour un compte qui existe | Le compte doit avoir le numéro fiscal (13 chiffres) dans `uid`, un `mail`, et être sous `LDAP_USERS_DN` |

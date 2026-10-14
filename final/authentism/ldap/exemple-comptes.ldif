@@ -12,7 +12,23 @@
 #  - uid          = numéro fiscal (13 chiffres) = identifiant de connexion
 #  - mail         = adresse qui reçoit le code MFA
 #  - employeeType = rôle : usager | agent | admin
+#
+#  Les administrateurs ont AUSSI un compte dans ou=admins, avec un mot de passe
+#  différent, demandé pour ouvrir le panneau d'administration :
+#    ldappasswd -x -H ldaps://VOTRE_SERVEUR -D "cn=admin,dc=dgfip,dc=local" -W \
+#      -s 'AdminPanel#2026!' "uid=1000000000001,ou=admins,dc=dgfip,dc=local"
 # =============================================================
+
+dn: ou=admins,dc=dgfip,dc=local
+objectClass: organizationalUnit
+ou: admins
+
+dn: uid=1000000000001,ou=admins,dc=dgfip,dc=local
+objectClass: inetOrgPerson
+uid: 1000000000001
+cn: Administration - Alice Martin
+sn: Martin
+description: Compte d'administration Authentism
 
 dn: uid=1000000000001,ou=users,dc=dgfip,dc=local
 objectClass: inetOrgPerson

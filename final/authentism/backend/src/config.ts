@@ -21,6 +21,7 @@ export const config = {
     bindDn: required("LDAP_BIND_DN"), // compte de service de l'application
     bindPassword: required("LDAP_BIND_PASSWORD"),
     usersDn: required("LDAP_USERS_DN"), // branche où se trouvent les comptes
+    adminsDn: required("LDAP_ADMINS_DN"), // branche des comptes d'administration
     loginAttribute: process.env.LDAP_LOGIN_ATTRIBUTE || "uid", // contient le numéro fiscal
     roleAttribute: process.env.LDAP_ROLE_ATTRIBUTE || "employeeType", // usager | agent | admin
     caFile: "/ldap-ca/ca.crt", // facultatif : CA du serveur LDAP

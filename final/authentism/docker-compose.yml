@@ -89,6 +89,7 @@ services:
       LDAP_BIND_DN: ${LDAP_BIND_DN:?Renseignez LDAP_BIND_DN dans le fichier .env}
       LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:?Renseignez LDAP_BIND_PASSWORD dans le fichier .env}
       LDAP_USERS_DN: ${LDAP_USERS_DN:?Renseignez LDAP_USERS_DN dans le fichier .env}
+      LDAP_ADMINS_DN: ${LDAP_ADMINS_DN:-ou=admins,dc=dgfip,dc=local}
       LDAP_LOGIN_ATTRIBUTE: ${LDAP_LOGIN_ATTRIBUTE:-uid}
       LDAP_ROLE_ATTRIBUTE: ${LDAP_ROLE_ATTRIBUTE:-employeeType}
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
@@ -116,7 +117,7 @@ services:
   web:
     build: ./frontend
     ports:
-      - "443:443"
+      - "443:443" # HTTPS uniquement (le port 80 n'est pas exposé)
     volumes:
       - certs-web:/etc/nginx/certs:ro
     depends_on:

@@ -2,16 +2,25 @@
 #  LDAP DE TEST UNIQUEMENT (service "ldap-test" de docker-compose.yml)
 #  Chargé automatiquement au premier démarrage du LDAP de test.
 #
-#  Comptes :
+#  Comptes de connexion (ou=users) :
 #    1000000000001  Admin#Dgfip2026!   (admin)
 #    2000000000002  Agent#Dgfip2026!   (agent)
 #    3000000000003  Usager#Dgfip2026!  (usager)
+#
+#  Compte d'administration (ou=admins) - mot de passe DIFFÉRENT,
+#  demandé pour ouvrir le panneau d'administration :
+#    1000000000001  AdminPanel#2026!
+#
 #  Les mots de passe sont stockés hachés ({SSHA}), jamais en clair.
 # =============================================================
 
 dn: ou=users,dc=dgfip,dc=local
 objectClass: organizationalUnit
 ou: users
+
+dn: ou=admins,dc=dgfip,dc=local
+objectClass: organizationalUnit
+ou: admins
 
 dn: uid=1000000000001,ou=users,dc=dgfip,dc=local
 objectClass: inetOrgPerson
@@ -21,7 +30,7 @@ givenName: Alice
 sn: Martin
 mail: admin@dgfip.local
 employeeType: admin
-userPassword: {SSHA}qacE2m8MK1e0cgphvkjHlsbMlmPQh9yVelFF0g==
+userPassword: {SSHA}mcs08L/TzXN5STLHsVK9+kBz4Rhn+yxjKT4bhg==
 
 dn: uid=2000000000002,ou=users,dc=dgfip,dc=local
 objectClass: inetOrgPerson
@@ -31,7 +40,7 @@ givenName: Bruno
 sn: Durand
 mail: agent@dgfip.local
 employeeType: agent
-userPassword: {SSHA}D8tVhpUWMvj3Chf85KaOFAsJttowFIJuNx9AaQ==
+userPassword: {SSHA}FbzHpnu6p3fzKBIGIlNBy5BU1t07ueijlzZcOQ==
 
 dn: uid=3000000000003,ou=users,dc=dgfip,dc=local
 objectClass: inetOrgPerson
@@ -41,4 +50,12 @@ givenName: Camille
 sn: Petit
 mail: usager@dgfip.local
 employeeType: usager
-userPassword: {SSHA}HJXAflSwyVepmy3yifcNFkxtaiMC+NtrhWMIkA==
+userPassword: {SSHA}GvNQzfge6F2/FRowlXjCEoeOETgsOtyF9ohHqA==
+
+dn: uid=1000000000001,ou=admins,dc=dgfip,dc=local
+objectClass: inetOrgPerson
+uid: 1000000000001
+cn: Administration - Alice Martin
+sn: Martin
+description: Compte d'administration Authentism
+userPassword: {SSHA}qhMSh51vOZbTzhpZnAxn+2lIzxBPq+I44MtVtw==

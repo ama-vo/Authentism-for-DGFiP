@@ -22,7 +22,7 @@ export interface User {
   role: Role;
 }
 
-const { loginAttribute, roleAttribute, usersDn } = config.ldap;
+const { loginAttribute, roleAttribute, usersDn, adminsDn } = config.ldap;
 
 // Certificat de l'autorité qui a signé le certificat du serveur LDAP (facultatif).
 // Sans fichier, Node utilise les autorités de confiance du système.
@@ -97,11 +97,11 @@ export async function listUsers(): Promise<User[]> {
 // Vérifie le mot de passe en se connectant à l'annuaire AVEC le compte de l'utilisateur.
 // Attention : un mot de passe vide ferait une connexion anonyme qui "réussit" ;
 // c'est pour ça que la validation refuse les mots de passe vides.
-export async function checkPassword(user: User, password: string): Promise<boolean> {
+export async function checkPassword(dn: string, password: string): Promise<boolean> {
   if (!password) return false;
   const client = newClient();
   try {
-    await client.bind(user.dn, password);
+    await client.bind(dn, password);
     return true;
   } catch (err) {
     if (err instanceof InvalidCredentialsError) return false;
@@ -123,10 +123,10 @@ function berField(tag: number, value: Buffer): Buffer {
   return Buffer.concat([Buffer.from([tag]), lengthBytes, value]);
 }
 
-export async function updatePassword(user: User, newPassword: string) {
+export async function setPassword(dn: string, newPassword: string) {
   const request = berField(
     0x30,
-    Buffer.concat([berField(0x80, Buffer.from(user.dn)), berField(0x82, Buffer.from(newPassword))])
+    Buffer.concat([berField(0x80, Buffer.from(dn)), berField(0x82, Buffer.from(newPassword))])
   );
   await withServiceAccount((client) => client.exop("1.3.6.1.4.1.4203.1.11.1", request));
 }
@@ -152,8 +152,7 @@ export async function createUser(data: {
     })
   );
   // Le mot de passe est défini ensuite, pour que ce soit l'annuaire qui le hache
-  const user = await findUser(data.fiscalNumber);
-  if (user) await updatePassword(user, data.password);
+  await setPassword(dn, data.password);
 }
 
 export async function updateRole(user: User, role: Role) {
@@ -166,6 +165,56 @@ export async function updateRole(user: User, role: Role) {
 
 export async function deleteUser(user: User) {
   await withServiceAccount((client) => client.del(user.dn));
+}
+
+// =============================================================
+//  COMPTES D'ADMINISTRATION (branche LDAP_ADMINS_DN, ex : ou=admins)
+//
+//  Un administrateur possède DEUX comptes dans l'annuaire :
+//   - son compte habituel (ou=users) pour se connecter au portail ;
+//   - un compte d'administration (ou=admins), avec un AUTRE mot de passe,
+//     exigé pour ouvrir le panneau d'administration.
+//  Ainsi, le vol du mot de passe de connexion ne suffit pas à administrer.
+// =============================================================
+const adminDn = (fiscalNumber: string) => `${loginAttribute}=${fiscalNumber},${adminsDn}`;
+
+export async function hasAdminAccount(fiscalNumber: string): Promise<boolean> {
+  return withServiceAccount(async (client) => {
+    const { searchEntries } = await client.search(adminsDn, {
+      scope: "one",
+      filter: new EqualityFilter({ attribute: loginAttribute, value: fiscalNumber }),
+      attributes: ["dn"],
+    });
+    return searchEntries.length === 1;
+  });
+}
+
+// Vérifie le mot de passe d'administration (bind avec le compte d'administration)
+export async function checkAdminPassword(fiscalNumber: string, password: string): Promise<boolean> {
+  if (!(await hasAdminAccount(fiscalNumber))) return false;
+  return checkPassword(adminDn(fiscalNumber), password);
+}
+
+// Crée le compte d'administration s'il n'existe pas, puis définit son mot de passe
+export async function setAdminPassword(user: User, password: string) {
+  if (!(await hasAdminAccount(user.fiscalNumber))) {
+    await withServiceAccount((client) =>
+      client.add(adminDn(user.fiscalNumber), {
+        objectClass: ["inetOrgPerson"],
+        [loginAttribute]: user.fiscalNumber,
+        cn: `Administration - ${user.firstName} ${user.lastName}`,
+        sn: user.lastName,
+        description: "Compte d'administration Authentism",
+      })
+    );
+  }
+  await setPassword(adminDn(user.fiscalNumber), password);
+}
+
+export async function deleteAdminAccount(fiscalNumber: string) {
+  if (await hasAdminAccount(fiscalNumber)) {
+    await withServiceAccount((client) => client.del(adminDn(fiscalNumber)));
+  }
 }
 
 // Test de connexion au démarrage : on réessaie pendant 1 minute (le temps que l'annuaire

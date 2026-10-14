@@ -33,16 +33,24 @@ export const schemas = {
   reset: z.object({ token, newPassword: strongPassword }),
   adminSession: z.object({ password: anyPassword }),
 
-  createUser: z.object({
-    fiscalNumber,
-    firstName: name,
-    lastName: name,
-    email: z.email("Adresse e-mail invalide").max(100),
-    role: z.enum(ROLES),
-    password: strongPassword,
-  }),
-  updateRole: z.object({ role: z.enum(ROLES) }),
-  updatePassword: z.object({ password: strongPassword }),
+  // Un administrateur a besoin d'un 2e mot de passe (administration), différent du 1er
+  createUser: z
+    .object({
+      fiscalNumber,
+      firstName: name,
+      lastName: name,
+      email: z.email("Adresse e-mail invalide").max(100),
+      role: z.enum(ROLES),
+      password: strongPassword,
+      adminPassword: strongPassword.optional(),
+    })
+    .refine((d) => d.role !== "admin" || d.adminPassword, "Mot de passe d'administration obligatoire pour un administrateur")
+    .refine((d) => d.adminPassword !== d.password, "Les deux mots de passe doivent être différents"),
+  updateRole: z
+    .object({ role: z.enum(ROLES), adminPassword: strongPassword.optional() })
+    .refine((d) => d.role !== "admin" || d.adminPassword, "Mot de passe d'administration obligatoire pour un administrateur"),
+  // target : "login" = mot de passe de connexion, "admin" = mot de passe d'administration
+  updatePassword: z.object({ password: strongPassword, target: z.enum(["login", "admin"]).default("login") }),
 
   page: z.object({
     title: z.string().trim().min(1).max(80),

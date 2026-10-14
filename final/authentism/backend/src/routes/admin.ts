@@ -3,7 +3,10 @@ import { Router } from "express";
 import { db } from "../services";
 import { audit } from "../audit";
 import { schemas, validate, fiscalNumber } from "../validation";
-import { listUsers, findUser, createUser, updateRole, updatePassword, deleteUser } from "../ldap";
+import {
+  listUsers, findUser, createUser, updateRole, setPassword, deleteUser,
+  checkPassword, checkAdminPassword, setAdminPassword, deleteAdminAccount,
+} from "../ldap";
 import { destroyAllSessions } from "../session";
 import { markPasswordChanged } from "../passwordAge";
 
@@ -30,6 +33,12 @@ router.post("/users", async (req, res) => {
   }
   await createUser(data);
   await markPasswordChanged(data.fiscalNumber);
+
+  // Un administrateur reçoit aussi son compte d'administration (ou=admins)
+  if (data.role === "admin" && data.adminPassword) {
+    const user = await findUser(data.fiscalNumber);
+    if (user) await setAdminPassword(user, data.adminPassword);
+  }
   await audit(req, "USER_CREATE", true, undefined, `Compte ${data.fiscalNumber} (${data.role})`);
   res.status(201).json({ ok: true });
 });
@@ -49,6 +58,15 @@ router.patch("/users/:id/role", async (req, res) => {
   if (user.fiscalNumber === req.session!.fiscalNumber) {
     return res.status(400).json({ error: "Vous ne pouvez pas modifier votre propre rôle" });
   }
+  if (data.role === "admin" && data.adminPassword) {
+    // Promotion : création du compte d'administration, avec un mot de passe différent
+    if (await checkPassword(user.dn, data.adminPassword)) {
+      return res.status(400).json({ error: "Le mot de passe d'administration doit être différent du mot de passe de connexion" });
+    }
+    await setAdminPassword(user, data.adminPassword);
+  } else if (data.role !== "admin") {
+    await deleteAdminAccount(user.fiscalNumber); // rétrogradation : plus de compte d'administration
+  }
   await updateRole(user, data.role);
   await destroyAllSessions(user.fiscalNumber); // le nouveau rôle s'applique dès la prochaine connexion
   await audit(req, "USER_ROLE_UPDATE", true, undefined, `Compte ${user.fiscalNumber} : ${user.role} -> ${data.role}`);
@@ -61,10 +79,22 @@ router.put("/users/:id/password", async (req, res) => {
   const { data, error } = validate(schemas.updatePassword, req.body);
   if (!data) return res.status(400).json({ error });
 
-  await updatePassword(user, data.password);
-  await markPasswordChanged(user.fiscalNumber);
+  if (data.target === "admin") {
+    // Mot de passe d'administration : uniquement pour un admin, et différent de celui de connexion
+    if (user.role !== "admin") return res.status(400).json({ error: "Ce compte n'est pas administrateur" });
+    if (await checkPassword(user.dn, data.password)) {
+      return res.status(400).json({ error: "Le mot de passe d'administration doit être différent du mot de passe de connexion" });
+    }
+    await setAdminPassword(user, data.password);
+  } else {
+    if (user.role === "admin" && (await checkAdminPassword(user.fiscalNumber, data.password))) {
+      return res.status(400).json({ error: "Le mot de passe de connexion doit être différent du mot de passe d'administration" });
+    }
+    await setPassword(user.dn, data.password);
+    await markPasswordChanged(user.fiscalNumber);
+  }
   await destroyAllSessions(user.fiscalNumber);
-  await audit(req, "USER_PASSWORD_UPDATE", true, undefined, `Compte ${user.fiscalNumber}`);
+  await audit(req, "USER_PASSWORD_UPDATE", true, undefined, `Compte ${user.fiscalNumber} (mot de passe ${data.target === "admin" ? "d'administration" : "de connexion"})`);
   res.json({ ok: true });
 });
 
@@ -75,6 +105,7 @@ router.delete("/users/:id", async (req, res) => {
   if (user.fiscalNumber === req.session!.fiscalNumber) {
     return res.status(400).json({ error: "Vous ne pouvez pas supprimer votre propre compte" });
   }
+  await deleteAdminAccount(user.fiscalNumber);
   await deleteUser(user);
   await destroyAllSessions(user.fiscalNumber);
   await audit(req, "USER_DELETE", true, undefined, `Compte ${user.fiscalNumber}`);

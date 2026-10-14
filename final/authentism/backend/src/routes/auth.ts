@@ -6,7 +6,7 @@ import { config } from "../config";
 import { redis, sendMail } from "../services";
 import { audit } from "../audit";
 import { schemas, validate } from "../validation";
-import { findUser, checkPassword, updatePassword } from "../ldap";
+import { findUser, checkPassword, setPassword, checkAdminPassword } from "../ldap";
 import { passwordAgeDays, markPasswordChanged } from "../passwordAge";
 import {
   createSession, destroySession, destroyAllSessions, randomToken,
@@ -42,7 +42,7 @@ router.post("/login", async (req, res) => {
 
   const user = await findUser(data.fiscalNumber);
   // Le mot de passe est vérifié par l'annuaire LDAP (bind avec le compte de l'utilisateur)
-  const passwordOk = user ? await checkPassword(user, data.password) : false;
+  const passwordOk = user ? await checkPassword(user.dn, data.password) : false;
 
   if (!user || !passwordOk) {
     const count = await redis.incr(failKey);
@@ -195,12 +195,15 @@ router.post("/reset-password", async (req, res) => {
     await audit(req, "PASSWORD_RESET", false, undefined, "Lien invalide ou expiré");
     return res.status(400).json({ error: "Lien invalide ou expiré" });
   }
-  await redis.del(key); // lien à usage unique
-
   const user = await findUser(fiscalNumber);
   if (!user) return res.status(400).json({ error: "Lien invalide ou expiré" });
 
-  await updatePassword(user, data.newPassword);
+  // Le mot de passe de connexion doit rester différent du mot de passe d'administration
+  if (user.role === "admin" && (await checkAdminPassword(user.fiscalNumber, data.newPassword))) {
+    return res.status(400).json({ error: "Le mot de passe de connexion doit être différent du mot de passe d'administration" });
+  }
+  await redis.del(key); // lien à usage unique : consommé une fois le mot de passe accepté
+  await setPassword(user.dn, data.newPassword);
   await markPasswordChanged(fiscalNumber);
   await destroyAllSessions(fiscalNumber); // déconnecte toutes les sessions ouvertes
   await redis.del(`fails:${fiscalNumber}`);
@@ -213,19 +216,32 @@ router.post("/reset-password", async (req, res) => {
 });
 
 // ---------------------------------------------------------------
-// Jeton d'administration : l'admin déjà connecté redonne son mot de passe
-// et reçoit un jeton dédié, de courte durée, limité aux fonctions d'administration.
+// Jeton d'administration : l'admin déjà connecté saisit son mot de passe
+// D'ADMINISTRATION (différent de celui de connexion, vérifié sur son compte
+// ou=admins) et reçoit un jeton dédié, de courte durée.
 // ---------------------------------------------------------------
 router.post("/admin-session", async (req, res) => {
   const { data, error } = validate(schemas.adminSession, req.body);
   if (!data) return res.status(400).json({ error });
 
-  const user = await findUser(req.session!.fiscalNumber);
-  const ok = user && user.role === "admin" && (await checkPassword(user, data.password));
-  if (!user || !ok) {
-    await audit(req, "ADMIN_ACCESS_FAILED", false);
-    return res.status(401).json({ error: "Mot de passe incorrect" });
+  const fiscalNumber = req.session!.fiscalNumber;
+
+  // Blocage après 5 échecs (le panneau admin est la cible la plus sensible)
+  const failKey = `admin-fails:${fiscalNumber}`;
+  if (Number((await redis.get(failKey)) || 0) >= config.maxLoginFailures) {
+    await audit(req, "ADMIN_ACCESS_FAILED", false, undefined, "Accès administration bloqué");
+    return res.status(429).json({ error: "Accès à l'administration bloqué suite à trop d'échecs. Réessayez dans 15 minutes." });
   }
+
+  const user = await findUser(fiscalNumber);
+  const ok = user && user.role === "admin" && (await checkAdminPassword(fiscalNumber, data.password));
+  if (!user || !ok) {
+    await redis.incr(failKey);
+    await redis.expire(failKey, config.lockDuration);
+    await audit(req, "ADMIN_ACCESS_FAILED", false);
+    return res.status(401).json({ error: "Mot de passe d'administration incorrect" });
+  }
+  await redis.del(failKey);
 
   await destroySession(req.cookies?.[COOKIE_ADMIN]);
   const token = await createSession({
