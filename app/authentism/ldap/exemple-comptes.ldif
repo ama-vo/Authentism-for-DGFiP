@@ -1,0 +1,42 @@
+# =============================================================
+#  FACULTATIF : comptes de test à ajouter dans VOTRE annuaire LDAP
+#  (adapter dc=dgfip,dc=local et ou=users à votre annuaire)
+#
+#  Import :
+#    ldapadd -x -H ldaps://VOTRE_SERVEUR -D "cn=admin,dc=dgfip,dc=local" -W -f exemple-comptes.ldif
+#
+#  Puis définir les mots de passe (l'annuaire les hache lui-même) :
+#    ldappasswd -x -H ldaps://VOTRE_SERVEUR -D "cn=admin,dc=dgfip,dc=local" -W \
+#      -s 'Admin#Dgfip2026!' "uid=1000000000001,ou=users,dc=dgfip,dc=local"
+#
+#  - uid          = numéro fiscal (13 chiffres) = identifiant de connexion
+#  - mail         = adresse qui reçoit le code MFA
+#  - employeeType = rôle : usager | agent | admin
+# =============================================================
+
+dn: uid=1000000000001,ou=users,dc=dgfip,dc=local
+objectClass: inetOrgPerson
+uid: 1000000000001
+cn: Alice Martin
+givenName: Alice
+sn: Martin
+mail: admin@dgfip.local
+employeeType: admin
+
+dn: uid=2000000000002,ou=users,dc=dgfip,dc=local
+objectClass: inetOrgPerson
+uid: 2000000000002
+cn: Bruno Durand
+givenName: Bruno
+sn: Durand
+mail: agent@dgfip.local
+employeeType: agent
+
+dn: uid=3000000000003,ou=users,dc=dgfip,dc=local
+objectClass: inetOrgPerson
+uid: 3000000000003
+cn: Camille Petit
+givenName: Camille
+sn: Petit
+mail: usager@dgfip.local
+employeeType: usager

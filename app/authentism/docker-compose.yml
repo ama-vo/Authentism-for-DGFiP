@@ -1,0 +1,140 @@
+# =============================================================
+#  Authentism - Système d'authentification DGFiP
+#  Lancement :
+#    cp .env.example .env    (puis remplir le fichier .env)
+#    docker compose up --build
+# =============================================================
+#
+#  Navigateur ──HTTPS──> web (nginx : file d'attente + load balancer + React)
+#                          │
+#                          └──> backend (x2 réplicas, API Node/Express)
+#                                  ├── annuaire LDAP EXISTANT (configuré dans .env)
+#                                  ├── redis     (sessions, codes MFA)
+#                                  ├── postgres  (journaux + pages du dashboard)
+#                                  └── mail      (serveur mail de test pour le MFA)
+
+services:
+  # --- PKI : génère l'autorité de certification et le certificat X.509 du site ---
+  pki:
+    image: alpine:3.20
+    command: sh /pki/generate.sh
+    volumes:
+      - ./pki/generate.sh:/pki/generate.sh:ro
+      - pki-ca:/out/ca
+      - certs-web:/out/web
+
+  # --- Redis : stockage côté serveur des sessions et des codes MFA ---
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:?Fichier .env manquant - lancez cp .env.example .env}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
+      interval: 5s
+      retries: 10
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks: [back]
+
+  # --- PostgreSQL : journaux d'audit + pages du dashboard ---
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: authentism
+      POSTGRES_USER: authentism
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Fichier .env manquant - lancez cp .env.example .env}
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentism"]
+      interval: 5s
+      retries: 10
+    networks: [back]
+
+  # --- Serveur mail de test (les codes MFA arrivent ici) ---
+  mail:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025" # interface web : http://localhost:8025
+    networks: [back, front]
+
+  # --- LDAP DE TEST (uniquement si COMPOSE_PROFILES=test dans le .env) ---
+  # Remplace l'annuaire de la DGFiP pour tester le projet sans vrai LDAP.
+  # En production : retirer COMPOSE_PROFILES=test et pointer LDAP_URL vers le vrai annuaire.
+  ldap-test:
+    image: osixia/openldap:1.5.0
+    platform: linux/amd64 # image amd64 uniquement (émulée sur Mac M1/M2)
+    profiles: ["test"]
+    hostname: ldap-test
+    command: --copy-service
+    environment:
+      LDAP_ORGANISATION: "DGFiP (test)"
+      LDAP_DOMAIN: "dgfip.local"
+      LDAP_ADMIN_PASSWORD: ${LDAP_BIND_PASSWORD}
+      LDAP_TLS: "false" # test local uniquement : en production, ldaps:// obligatoire
+    volumes:
+      - ./ldap/ldap-test.ldif:/container/service/slapd/assets/config/bootstrap/ldif/custom/50-comptes-test.ldif:ro
+      - ldap-test-data:/var/lib/ldap
+      - ldap-test-config:/etc/ldap/slapd.d
+    networks: [ldap]
+
+  # --- API (scalable horizontalement : 2 réplicas par défaut) ---
+  backend:
+    build: ./backend
+    deploy:
+      replicas: 2
+    environment:
+      # Annuaire LDAP existant : tout se règle dans le fichier .env
+      LDAP_URL: ${LDAP_URL:?Renseignez LDAP_URL dans le fichier .env}
+      LDAP_BIND_DN: ${LDAP_BIND_DN:?Renseignez LDAP_BIND_DN dans le fichier .env}
+      LDAP_BIND_PASSWORD: ${LDAP_BIND_PASSWORD:?Renseignez LDAP_BIND_PASSWORD dans le fichier .env}
+      LDAP_USERS_DN: ${LDAP_USERS_DN:?Renseignez LDAP_USERS_DN dans le fichier .env}
+      LDAP_LOGIN_ATTRIBUTE: ${LDAP_LOGIN_ATTRIBUTE:-uid}
+      LDAP_ROLE_ATTRIBUTE: ${LDAP_ROLE_ATTRIBUTE:-employeeType}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      DATABASE_URL: postgres://authentism:${POSTGRES_PASSWORD}@postgres:5432/authentism
+      SMTP_HOST: mail
+      SMTP_PORT: 1025
+      PUBLIC_URL: https://localhost
+    volumes:
+      - ./ldap:/ldap-ca:ro # mettre ici le ca.crt du serveur LDAP si besoin (ldaps://)
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # pour joindre un LDAP installé sur la machine hôte
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 5s
+      retries: 20
+      start_period: 10s
+    networks: [back, ldap]
+
+  # --- Passerelle web : HTTPS, file d'attente, load balancer, frontend React ---
+  web:
+    build: ./frontend
+    ports:
+      - "443:443"
+    volumes:
+      - certs-web:/etc/nginx/certs:ro
+    depends_on:
+      pki:
+        condition: service_completed_successfully
+      backend:
+        condition: service_healthy
+    networks: [front, back]
+
+networks:
+  front:
+  back:
+    internal: true # Redis et PostgreSQL ne sont pas joignables depuis l'extérieur
+  ldap: # réseau de sortie : uniquement pour que l'API joigne l'annuaire LDAP
+
+volumes:
+  pki-ca:
+  certs-web:
+  pg-data:
+  ldap-test-data:
+  ldap-test-config:
