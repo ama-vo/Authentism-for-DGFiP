@@ -1,9 +1,0 @@
-.env
-**/.env
-__pycache__/
-*.pyc
-node_modules/
-dist/
-*.jsonl
-*.db
-.DS_Store
